@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pv-dynamic-pod
+spec:
+  volumes:
+    - name: pv-dynamic-storage
+      persistentVolumeClaim:
+        claimName: redmine
+  nodeSelector:
+     kubernetes.io/hostname: cs-hsuhw-k8sm1
+  containers:
+    - name: pv-dynamic-container
+      image: nginx
+      ports:
+        - containerPort: 80
+          name: "nginx"
+      volumeMounts:
+        - mountPath: "/srv/test"
+          name: pv-dynamic-storage

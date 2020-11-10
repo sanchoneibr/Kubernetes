@@ -1,0 +1,32 @@
+{{- if and .Values.persistence_backup.enabled (not .Values.persistence_backup.existingClaim) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-script
+data:
+  backup_files.sh: |-
+    #!/bin/bash
+    SRC_PATH=/usr/src/redmine
+    DATE="$(date -I)"
+    DEST_BACKUP="/srv/redmine_backup"
+    DAY_BACKUP=8
+    REDMINE_DATABASE="bitnami_redmine"
+    HOST_MYSQL="redmine-mariadb"
+    DB_USERNAME="bn_redmine"
+    DB_PASSWORD="52eb3E!918"
+
+
+    cd $SRC_PATH/files
+    tar -czpf ${DEST_BACKUP}/files-${DATE}.tar.gz *
+    mysqldump -h${HOST_MYSQL} -u${DB_USERNAME} -p${DB_PASSWORD} ${REDMINE_DATABASE} | gzip > ${DEST_BACKUP}/${REDMINE_DATABASE}-${DATE}.sql.gz
+    if [ -f ${DEST_BACKUP}/${REDMINE_DATABASE}-${DATE}.sql.gz ] 
+    then
+        echo "Удаляем старые резервные копии старше недели!";
+        find ${DEST_BACKUP} -name "*.gz" -type f -mtime +${DAY_BACKUP} -delete
+    fi
+
+  crontab_files: |-
+    # m h dom mon dow user  command
+     50 23 *   *   *  root  bash /srv/backup_files.sh
+
+{{- end }}

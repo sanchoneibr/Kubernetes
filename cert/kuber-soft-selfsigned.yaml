@@ -1,0 +1,16 @@
+apiVersion: cert-manager.io/v1alpha2
+kind: ClusterIssuer
+metadata:
+  name: kuber-soft-selfsigned
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1alpha2
+kind: Certificate
+metadata:
+  name: kuber-soft-selfsigned-cert
+spec:
+  commonName: '*.kuber-soft.loc'
+  secretName: kuber-soft-selfsigned-cert-tls
+  issuerRef:
+    name: kuber-soft-selfsigned

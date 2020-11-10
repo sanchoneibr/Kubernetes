@@ -1,0 +1,42 @@
+# This is an example values for stolon chart
+#
+# All values described here:
+# https://github.com/helm/charts/blob/master/stable/stolon/values.yaml
+# clusterName:
+image:
+  repository: sorintlab/stolon
+  tag: v0.16.0-pg11
+  pullPolicy: IfNotPresent
+  ## Add secrets manually via kubectl on kubernetes cluster and reference here
+  # pullSecrets:
+  #   - name: "myKubernetesSecret"
+
+superuserPassword: hack_remote236
+replicationPassword: hack_remote236
+persistence:
+  enabled: true
+  size: 10G
+
+keeper:
+  replicaCount: 3
+  nodeSelector:
+    node-role.kubernetes.io/master: ""
+  tolerations:
+  - effect: NoSchedule
+    key: node-role.kubernetes.io/master
+
+proxy:
+  replicaCount: 3
+  nodeSelector:
+    node-role.kubernetes.io/master: ""
+  tolerations:
+  - effect: NoSchedule
+    key: node-role.kubernetes.io/master
+
+sentinel:
+  replicaCount: 3
+  nodeSelector:
+    node-role.kubernetes.io/master: ""
+  tolerations:
+  - effect: NoSchedule
+    key: node-role.kubernetes.io/master

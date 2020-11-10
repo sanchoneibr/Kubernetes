@@ -1,0 +1,110 @@
+iapt-get update && apt install -y curl apt-transport-https git net-tools -y
+apt -y install   apt-transport-https   ca-certificates   curl   gnupg2   software-properties-common
+apt install zsh powerline fonts-powerline -y
+sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+git clone https://github.com/zsh-users/zsh-syntax-highlighting.git "$HOME/.zsh-syntax-highlighting" --depth 1
+git clone https://github.com/zsh-users/zsh-autosuggestions ~/.oh-my-zsh/custom/plugins/zsh-autosuggestions
+
+echo "source $HOME/.zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" >> "$HOME/.zshrc"
+source ~/.zshrc
+curl -fsSL https://download.docker.com/linux/debian/gpg | sudo apt-key add -
+apt-add-repository  "deb [arch=amd64] https://download.docker.com/linux/ubuntu  $(lsb_release -cs)  stable" 
+curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+echo "deb https://apt.kubernetes.io/ kubernetes-xenial main" > /etc/apt/sources.list.d/kubernetes.list
+apt update 
+add-apt-repository ppa:linbit/linbit-drbd9-stack
+apt install drbd-utils drbd-dkms lvm2 -y
+echo drbd > /etc/modules-load.d/drbd.conf
+apt install -y atop htop
+echo "net.ipv4.ip_nonlocal_bind=1\nnet.ipv4.ip_forward=1\nnet.ipv4.ip_local_reserved_ports=30000-32767\nnet.bridge.bridge-nf-call-iptables=1\nnet.bridge.bridge-nf-call-arptables=1\nnet.bridge.bridge-nf-call-ip6tables=1" >> /etc/sysctl.conf
+echo "ip_vs\nip_vs_rr\nip_vs_wrr\nip_vs_sh\nnf_conntrack_ipv4\n" > /etc/modules-load.d/kube_proxy-ipvs.conf
+echo "br_netfilter\noverlay" > /etc/modules-load.d/k8s.conf
+apt-cache madison docker-ce
+apt install docker-ce=5:19.03.11~3-0~ubuntu-focal containerd.io -y
+echo '{\n  "exec-opts": ["native.cgroupdriver=systemd"],\n  "log-driver": "json-file",\n  "log-opts": {\n    "max-size": "100m"\n  },\n  "storage-driver": "overlay2"\n}\n ' > /etc/docker/daemon.json
+systemctl restart docker 
+Заменяем в /etc/hosts ип хоста, на внешний в замен локального.
+
+git clone https://git.cosysoft.ru/cosysoft/config-app-kuber.git
+cd /config-app-kuber/install_cluster/install_cluster
+Установка Etcd
+Изменяем create-config.sh вносим
+vi create-config.sh
+cd archives
+export etcdVersion=v3.3.25 
+wget https://github.com/coreos/etcd/releases/download/$etcdVersion/etcd-$etcdVersion-linux-amd64.tar.gz
+sudo tar -xvf etcd-$etcdVersion-linux-amd64.tar.gz -C /usr/local/bin/ --strip-components=1
+cd .. && sudo ./create-config.sh 
+# проверка работы
+etcdctl cluster-health
+etcdctl member list
+# Запуск первого мастера kubernetes
+apt-cache madison kubelet
+apt install kubelet=1.17.11-00 kubeadm=1.17.11-00 kubectl=1.17.11-00
+./create-config.sh kubeadm
+kubeadm config images pull
+kubeadm config migrate --old-config kubeadmin/kubeadm-init.yaml --new-config kubeadmin/kubeadm-init_new.yaml
+kubeadm init  --config=kubeadmin/kubeadm-init_new.yaml 
+export KUBECONFIG=/etc/kubernetes/admin.conf
+
+# Установка сети https://docs.projectcalico.org/getting-started/kubernetes/self-managed-onprem/onpremises
+curl https://docs.projectcalico.org/manifests/calico.yaml -O
+vi calico.yaml # замена сети подов с 192.168.0.0/16 на 10.168.0.0/16
+kubectl create -f calico.yaml
+
+#Теперь остальные мастера
+export master02=192.168.63.3
+export master03=192.168.63.6
+scp -r /etc/kubernetes/pki $master02:/etc/kubernetes/
+scp -r /etc/kubernetes/pki $master03:/etc/kubernetes/
+./create-config.sh kubeadm
+kubeadm config images pull
+kubeadm config migrate --old-config kubeadmin/kubeadm-init.yaml --new-config kubeadmin/kubeadm-init_new.yaml
+kubeadm init  --config=kubeadmin/kubeadm-init_new.yaml 
+
+# Изменяем у kube-proxy взаимодействие iptables на ipvs
+apt install ipvsadm
+kubectl edit configmap kube-proxy -n kube-system
+#Заменяем настройки kube-proxy эти строчки:
+    ipvs:
+      excludeCIDRs: null
+      minSyncPeriod: 0s
+      scheduler: ""
+      strictARP: false
+      syncPeriod: 0s
+    kind: KubeProxyConfiguration
+    metricsBindAddress: ""
+    mode: ""
+# на эти настройки:
+    ipvs:
+      excludeCIDRs: []
+      minSyncPeriod: 0s
+      scheduler: rr
+      strictARP: false
+      syncPeriod: 30s
+    kind: KubeProxyConfiguration
+    metricsBindAddress: 127.0.0.1:10249
+    mode: ipvs
+
+# Теперь удалим поды, что бы они переапустились:
+kubectl get pods -n kube-system
+kubectl delete po -n kube-system [name_pod]
+
+# Настройка стораджа linstor описанна https://github.com/kvaps/kube-linstor после установки
+# смотрим список нод
+kubectl exec -ti -n linstor linstor-linstor-controller-0 -- linstor node l  
+# добавляем ноды
+kubectl exec -ti -n linstor linstor-linstor-controller-0 -- linstor node create cs-hsuhw-k8sm1 192.168.63.2 --communication-type SSL
+kubectl exec -ti -n linstor linstor-linstor-controller-0 -- linstor node create cs-hsuhw-k8sm2 192.168.63.3 --communication-type SSL
+kubectl exec -ti -n linstor linstor-linstor-controller-0 -- linstor node create cs-vsudoc-k8sm4 192.168.63.6 --communication-type SSL
+# Для создания pool нам нужно создать lvm группы и раздел
+cosysoft@cs-hsuhw-k8sM1 ~ sudo pvcreate /dev/sdd 
+  Physical volume "/dev/sdd" successfully created.
+cosysoft@cs-hsuhw-k8sM1 ~ sudo vgcreate tg /dev/sdd 
+  Volume group "tg" successfully created
+cosysoft@cs-hsuhw-k8sM1 ~ sudo lvcreate -l 100%FREE  --thinpool tg/thinssd
+  Thin pool volume with chunk size 128.00 KiB can address at most 31.62 TiB of data.
+  Logical volume "thinssd" created.
+kubectl exec -ti -n linstor linstor-linstor-controller-0 -- linstor storage-pool create lvmthin cs-hsuhw-k8sm1 linstor-pool tg/thinssd
+kubectl exec -ti -n linstor linstor-linstor-controller-0 -- linstor storage-pool create lvmthin cs-hsuhw-k8sm2 linstor-pool tg/thinssd
+

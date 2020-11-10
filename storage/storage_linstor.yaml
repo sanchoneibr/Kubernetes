@@ -1,0 +1,19 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: linstor
+provisioner: linstor.csi.linbit.com
+parameters:
+  autoPlace: "2"
+  storagePool: "linstor-pool"
+  filesystem: "xfs"
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: linstor-single-replica
+provisioner: linstor.csi.linbit.com
+parameters:
+  autoPlace: "1"
+  storagePool: "linstor-pool"
+  filesystem: "xfs"

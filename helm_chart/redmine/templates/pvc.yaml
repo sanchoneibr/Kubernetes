@@ -1,0 +1,29 @@
+{{- if and .Values.persistence.enabled (not .Values.persistence.existingClaim) }}
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: {{ template "redmine.fullname" . }}
+  labels: {{- include "redmine.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.persistence.accessMode | quote }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size | quote }}
+  {{ include "redmine.storageClass" . }}
+{{- end }}
+{{- if and .Values.persistence_backup.enabled (not .Values.persistence_backup.existingClaim) }}
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name:  {{ template "redmine.fullname" . }}-backup
+  labels: {{- include "redmine.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.persistence_backup.accessMode | quote }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence_backup.size | quote }}
+  {{ include "redmine.storageClassBack" . }}
+{{- end }}
